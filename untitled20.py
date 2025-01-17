@@ -122,22 +122,74 @@ textdata['tokens'] = textdata['tokens'].apply(text_stemmer)
 #shuffle
 textdata = textdata.sample(frac=1, random_state=1).reset_index(drop=True)
 textdata['clean_text'] = textdata['tokens'].apply(lambda tokens: ' '.join(tokens))
-
-
-vectorizers=[CountVectorizer(),TfidfVectorizer()]
-models=[ MultinomialNB(),svm.SVC()]
-
+##Counts
+vectorizer = CountVectorizer()
+X = vectorizer.fit_transform(textdata['clean_text'])
 Y = textdata['Class']
-resultsdfac=pd.DataFrame()
-for vectorizer in vectorizers:
-    X = vectorizer.fit_transform(textdata['clean_text'])
-    X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.2, random_state=1)
-    Y_train = np.vectorize(lambda x: pd.to_numeric(x, errors='coerce'))(Y_train)
-    Y_test = np.vectorize(lambda x: pd.to_numeric(x, errors='coerce'))(Y_test)
-    for model in models:
-        model.fit(X_train, Y_train)
-        Y_pred = model.predict(X_test)
-        resultsdfac.loc[model.__class__.__name__,vectorizer.__class__.__name__]=accuracy = accuracy_score(Y_test, Y_pred) 
+#Browse tokens
+feature_names = vectorizer.get_feature_names_out()
 
+
+
+
+
+
+#Split Dataset
+X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size = 0.2, random_state=2)
+
+
+#transform Y_train to numeric
+Y_train = np.vectorize(lambda x: pd.to_numeric(x, errors='coerce'))(Y_train)
+Y_test = np.vectorize(lambda x: pd.to_numeric(x, errors='coerce'))(Y_test)
+##Naive Bayes
+nb_model = MultinomialNB(alpha=0.0000001)
+nb_model.fit(X_train, Y_train)
+##Test
+Y_pred = nb_model.predict(X_test)
+accuracy = accuracy_score(Y_test, Y_pred)
+
+print(classification_report(Y_test, Y_pred))
+print(f"Accuracy: {accuracy * 100:.2f}%")
+print(confusion_matrix(Y_test, Y_pred))
+
+tfidf_vectorizer = TfidfVectorizer()
+X = tfidf_vectorizer.fit_transform(textdata['clean_text'])
+Y = textdata['Class']
+X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.2, random_state=42)
+Y_train = np.vectorize(lambda x: pd.to_numeric(x, errors='coerce'))(Y_train)
+Y_test = np.vectorize(lambda x: pd.to_numeric(x, errors='coerce'))(Y_test)
+
+nb_model = MultinomialNB(alpha=0.00000001)  # alpha=1 for Laplace smoothing
+nb_model.fit(X_train, Y_train)
+Y_pred = nb_model.predict(X_test)
+
+# Step 5: Evaluate the model
+accuracy = accuracy_score(Y_test, Y_pred)
+print(f"Accuracy: {accuracy * 100:.2f}%")
+print(classification_report(Y_test, Y_pred))
+print(classification_report(Y_test, Y_pred))
+
+
+#svm
+SVM = svm.SVC(kernel = 'linear')
+SVM.fit(X_train, Y_train)
+
+print("SVM Testing Accuracy Score -> ", SVM.score(X_test, Y_test)*100)
+print(confusion_matrix(Y_test, Y_pred))
+
+#Grid search in svm 
+
+vectorizer = CountVectorizer()
+X = vectorizer.fit_transform(textdata['clean_text'])
+Y = textdata['Class']
+X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.2, random_state=42)
+Y_train = np.vectorize(lambda x: pd.to_numeric(x, errors='coerce'))(Y_train)
+Y_test = np.vectorize(lambda x: pd.to_numeric(x, errors='coerce'))(Y_test)
+
+SVM = svm.SVC(kernel = 'linear')
+SVM.fit(X_train, Y_train)
+
+print("SVM Testing Accuracy Score -> ", SVM.score(X_test, Y_test)*100)
+print(confusion_matrix(Y_test, Y_pred))
 
 
