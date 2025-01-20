@@ -44,7 +44,14 @@ nltk.data.path.append(r'C:/nltk_data')
 
 fake_news = pd.read_csv(r'C:\Users\Γιώργος Μπόζιακας\Fake_news_data\Fake.csv')
 true_news = pd.read_csv(r'C:\Users\Γιώργος Μπόζιακας\Fake_news_data\True.csv')
-fake_df=pd.DataFrame(data=fake_news._data)
+
+#drop empty news
+fake_news=fake_news.drop(fake_news[fake_news['text']==' '].index,axis=0)
+true_news=true_news.drop(true_news[true_news['text']==' '].index,axis=0)
+
+
+
+
 
 
 
@@ -123,9 +130,18 @@ def text_stemmer(tokens):
 
 textdata['tokens'] = textdata['tokens'].apply(text_stemmer)
 
+
+
+
 #shuffle
 textdata = textdata.sample(frac=1, random_state=1).reset_index(drop=True)
+
 textdata['clean_text'] = textdata['tokens'].apply(lambda tokens: ' '.join(tokens))
+
+#clean again
+textdata=textdata.drop(textdata[textdata['clean_text']==''].index,axis=0)
+textdata = textdata.reset_index(drop=True)
+
 
 
 logistic_model = LogisticRegression()
@@ -161,7 +177,7 @@ for vectorizer in vectorizers:
 
 #Word2vec
 
-w2vec = Word2Vec(sentences=textdata['tokens'], vector_size=100, window=5, min_count=1, workers=6)
+w2vec = Word2Vec(sentences=textdata['tokens'], vector_size=300, window=5, min_count=1, workers=6)
 
 words = list(w2vec.wv.index_to_key)
 print(words[0])  # print first 10 words as an example
@@ -180,10 +196,29 @@ def get_average_word2vec(tokens_list, w2vec):
     # If no valid words, return a zero vector of the desired size
 
 
-k1=np.array(len(textdata),100)
-for i in range(len(textdata)):
- k1 = get_average_word2vec(textdata['tokens'][0], w2vec) 
+k1=np.zeros((len(textdata),300))
 
-valid_words = [w2vec.wv[word] for word in textdata['tokens'][0] if word in w2vec.wv]
-tmp= np.vstack(valid_words)
-result=np.mean(tmp, axis=0)
+for i in range(len(textdata)):
+    
+    k1[i,:] = get_average_word2vec(textdata['tokens'][i], w2vec) 
+
+
+
+models=[ logistic_model,lasso_model,ridge_model]  
+X_train, X_test, Y_train, Y_test = train_test_split(k1, Y, test_size=0.2, random_state=2)
+Y_train = np.vectorize(lambda x: pd.to_numeric(x, errors='coerce'))(Y_train)
+Y_test = np.vectorize(lambda x: pd.to_numeric(x, errors='coerce'))(Y_test)
+for model in models:
+        model.fit(X_train, Y_train)
+        Y_pred = model.predict(X_test)
+        if model==lasso_model :
+            resultsdfac.loc['lasso','word2vec'] = accuracy_score(Y_test, Y_pred)
+        elif model==ridge_model:
+            resultsdfac.loc['ridge','word2vec']= accuracy_score(Y_test, Y_pred)
+        elif  model==logistic_model:
+            resultsdfac.loc['logistic','word2vec'] = accuracy_score(Y_test, Y_pred) 
+        else:
+            resultsdfac.loc[model.__class__.__name__,'word2vec']= accuracy_score(Y_test, Y_pred) 
+
+
+
