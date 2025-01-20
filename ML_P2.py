@@ -25,6 +25,8 @@ from sklearn.naive_bayes import MultinomialNB
 from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn import svm
+from gensim.models import Word2Vec
+from sklearn.linear_model import LogisticRegression
 
 stemmer = PorterStemmer()
 stop_words = set(stopwords.words("english"))
@@ -57,6 +59,8 @@ true_news.isnull().sum()
 fake_news['Class']=1
 true_news['Class']=0
 
+#Remove the Reueters tag and back from real news
+true_news["text"] = true_news["text"].str.replace(r".*?\(Reuters\) -", "", regex=True)
 #create a unified dataframe
 cols=fake_news.columns.values
 cols=np.append(cols,'Class')
@@ -124,20 +128,62 @@ textdata = textdata.sample(frac=1, random_state=1).reset_index(drop=True)
 textdata['clean_text'] = textdata['tokens'].apply(lambda tokens: ' '.join(tokens))
 
 
+logistic_model = LogisticRegression()
+lasso_model = LogisticRegression(penalty='l1', C=0.1, solver='liblinear')
+
+ridge_model = LogisticRegression(penalty='l2', C=0.1)
+
+
 vectorizers=[CountVectorizer(),TfidfVectorizer()]
-models=[ MultinomialNB(),svm.SVC()]
+''',svm.SVC()'''
+models=[ MultinomialNB(),logistic_model,lasso_model,ridge_model]
 
 Y = textdata['Class']
 resultsdfac=pd.DataFrame()
 for vectorizer in vectorizers:
     X = vectorizer.fit_transform(textdata['clean_text'])
-    X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.2, random_state=1)
+    X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.2, random_state=2)
     Y_train = np.vectorize(lambda x: pd.to_numeric(x, errors='coerce'))(Y_train)
     Y_test = np.vectorize(lambda x: pd.to_numeric(x, errors='coerce'))(Y_test)
     for model in models:
         model.fit(X_train, Y_train)
         Y_pred = model.predict(X_test)
-        resultsdfac.loc[model.__class__.__name__,vectorizer.__class__.__name__]=accuracy = accuracy_score(Y_test, Y_pred) 
+        if model==lasso_model :
+            resultsdfac.loc['lasso',vectorizer.__class__.__name__] = accuracy_score(Y_test, Y_pred)
+        elif model==ridge_model:
+            resultsdfac.loc['ridge',vectorizer.__class__.__name__]= accuracy_score(Y_test, Y_pred)
+        elif  model==logistic_model:
+            resultsdfac.loc['logistic',vectorizer.__class__.__name__] = accuracy_score(Y_test, Y_pred) 
+        else:
+            resultsdfac.loc[model.__class__.__name__,vectorizer.__class__.__name__]= accuracy_score(Y_test, Y_pred) 
 
 
 
+#Word2vec
+
+w2vec = Word2Vec(sentences=textdata['tokens'], vector_size=100, window=5, min_count=1, workers=6)
+
+words = list(w2vec.wv.index_to_key)
+print(words[0])  # print first 10 words as an example
+w2vec.wv['donald']
+
+
+def get_average_word2vec(tokens_list, w2vec):
+    # Filter out words that are not in the Word2Vec model's vocabulary
+   valid_words = [w2vec.wv[word] for word in tokens_list if word in w2vec.wv]
+    
+    # If valid words are found, return their average vector
+   
+   tmp= np.vstack(valid_words)
+   result=np.mean(tmp, axis=0) 
+   return result
+    # If no valid words, return a zero vector of the desired size
+
+
+k1=np.array(len(textdata),100)
+for i in range(len(textdata)):
+ k1 = get_average_word2vec(textdata['tokens'][0], w2vec) 
+
+valid_words = [w2vec.wv[word] for word in textdata['tokens'][0] if word in w2vec.wv]
+tmp= np.vstack(valid_words)
+result=np.mean(tmp, axis=0)

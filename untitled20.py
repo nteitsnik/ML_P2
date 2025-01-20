@@ -4,6 +4,12 @@ Created on Mon Jan 13 11:29:31 2025
 
 @author: n.nteits
 """
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Jan 13 11:29:31 2025
+
+@author: n.nteits
+"""
 
 import kagglehub
 import pandas as pd
@@ -25,6 +31,8 @@ from sklearn.naive_bayes import MultinomialNB
 from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn import svm
+from gensim.models import Word2Vec
+from sklearn.linear_model import LogisticRegression
 
 stemmer = PorterStemmer()
 stop_words = set(stopwords.words("english"))
@@ -57,6 +65,8 @@ true_news.isnull().sum()
 fake_news['Class']=1
 true_news['Class']=0
 
+#Remove the Reueters tag and back from real news
+true_news["text"] = true_news["text"].str.replace(r".*?\(Reuters\) -", "", regex=True)
 #create a unified dataframe
 cols=fake_news.columns.values
 cols=np.append(cols,'Class')
@@ -122,74 +132,35 @@ textdata['tokens'] = textdata['tokens'].apply(text_stemmer)
 #shuffle
 textdata = textdata.sample(frac=1, random_state=1).reset_index(drop=True)
 textdata['clean_text'] = textdata['tokens'].apply(lambda tokens: ' '.join(tokens))
-##Counts
-vectorizer = CountVectorizer()
-X = vectorizer.fit_transform(textdata['clean_text'])
+
+
+logistic_model = LogisticRegression()
+lasso_model = LogisticRegression(penalty='l1', C=0.1, solver='liblinear')
+
+ridge_model = LogisticRegression(penalty='l2', C=0.1)
+
+
+vectorizers=[CountVectorizer(),TfidfVectorizer()]
+''',svm.SVC()'''
+models=[ MultinomialNB(),logistic_model,lasso_model,ridge_model]
+
 Y = textdata['Class']
-#Browse tokens
-feature_names = vectorizer.get_feature_names_out()
-
-
-
-
-
-
-#Split Dataset
-X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size = 0.2, random_state=2)
-
-
-#transform Y_train to numeric
-Y_train = np.vectorize(lambda x: pd.to_numeric(x, errors='coerce'))(Y_train)
-Y_test = np.vectorize(lambda x: pd.to_numeric(x, errors='coerce'))(Y_test)
-##Naive Bayes
-nb_model = MultinomialNB(alpha=0.0000001)
-nb_model.fit(X_train, Y_train)
-##Test
-Y_pred = nb_model.predict(X_test)
-accuracy = accuracy_score(Y_test, Y_pred)
-
-print(classification_report(Y_test, Y_pred))
-print(f"Accuracy: {accuracy * 100:.2f}%")
-print(confusion_matrix(Y_test, Y_pred))
-
-tfidf_vectorizer = TfidfVectorizer()
-X = tfidf_vectorizer.fit_transform(textdata['clean_text'])
-Y = textdata['Class']
-X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.2, random_state=42)
-Y_train = np.vectorize(lambda x: pd.to_numeric(x, errors='coerce'))(Y_train)
-Y_test = np.vectorize(lambda x: pd.to_numeric(x, errors='coerce'))(Y_test)
-
-nb_model = MultinomialNB(alpha=0.00000001)  # alpha=1 for Laplace smoothing
-nb_model.fit(X_train, Y_train)
-Y_pred = nb_model.predict(X_test)
-
-# Step 5: Evaluate the model
-accuracy = accuracy_score(Y_test, Y_pred)
-print(f"Accuracy: {accuracy * 100:.2f}%")
-print(classification_report(Y_test, Y_pred))
-print(classification_report(Y_test, Y_pred))
-
-
-#svm
-SVM = svm.SVC(kernel = 'linear')
-SVM.fit(X_train, Y_train)
-
-print("SVM Testing Accuracy Score -> ", SVM.score(X_test, Y_test)*100)
-print(confusion_matrix(Y_test, Y_pred))
-
-#Grid search in svm 
-
-vectorizer = CountVectorizer()
-X = vectorizer.fit_transform(textdata['clean_text'])
-Y = textdata['Class']
-X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.2, random_state=42)
-Y_train = np.vectorize(lambda x: pd.to_numeric(x, errors='coerce'))(Y_train)
-Y_test = np.vectorize(lambda x: pd.to_numeric(x, errors='coerce'))(Y_test)
-
-SVM = svm.SVC(kernel = 'linear')
-SVM.fit(X_train, Y_train)
-
-print("SVM Testing Accuracy Score -> ", SVM.score(X_test, Y_test)*100)
-print(confusion_matrix(Y_test, Y_pred))
+resultsdfac=pd.DataFrame()
+for vectorizer in vectorizers:
+    X = vectorizer.fit_transform(textdata['clean_text'])
+    X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.2, random_state=2)
+    Y_train = np.vectorize(lambda x: pd.to_numeric(x, errors='coerce'))(Y_train)
+    Y_test = np.vectorize(lambda x: pd.to_numeric(x, errors='coerce'))(Y_test)
+    for model in models:
+        model.fit(X_train, Y_train)
+        Y_pred = model.predict(X_test)
+        if model==lasso_model :
+            resultsdfac.loc['lasso',vectorizer.__class__.__name__] = accuracy_score(Y_test, Y_pred)
+        elif model==ridge_model:
+            resultsdfac.loc['ridge',vectorizer.__class__.__name__]= accuracy_score(Y_test, Y_pred)
+        elif  model==logistic_model:
+            resultsdfac.loc['logistic',vectorizer.__class__.__name__] = accuracy_score(Y_test, Y_pred) 
+        else:
+            resultsdfac.loc[model.__class__.__name__,vectorizer.__class__.__name__]= accuracy_score(Y_test, Y_pred) 
 
 
