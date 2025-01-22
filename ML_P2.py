@@ -27,6 +27,12 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn import svm
 from gensim.models import Word2Vec
 from sklearn.linear_model import LogisticRegression
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.model_selection import RandomizedSearchCV
+from scipy.stats import loguniform
+import tqdm
+
+
 
 stemmer = PorterStemmer()
 stop_words = set(stopwords.words("english"))
@@ -98,18 +104,16 @@ y = news['Class']
 data['text']=data['text'].str.lower()
 data = data.reset_index(drop=True)
 #remove special characters
-for i in range(len(data)):
-    
-    data.loc[i,'text'] = re.sub(r'[^a-zA-Z0-9\s]', '', data.loc[i,'text'])
-    data.loc[i,'text'] = re.sub('\[.*?\]','',data.loc[i,'text'])
-    data.loc[i,'text'] = re.sub("\\W"," ",data.loc[i,'text'])
-    data.loc[i,'text'] = re.sub('https?://\S+|www\.\S+','',data.loc[i,'text'])
-    data.loc[i,'text'] = re.sub('<.*?>+',b'',data.loc[i,'text'])
-    #data.loc[i,'text'] = re.sub('[%s]' % re.escape(string.punctuation),'',data.loc[i,'text'])
-    data.loc[i,'text'] = re.sub('\w*\d\w*','',data.loc[i,'text'])
 
-
-
+def clean_text(text):
+        text = re.sub(r'[^a-zA-Z0-9\s]', '', text)  # Remove special characters
+        text = re.sub(r'\[.*?\]', '', text)  # Remove text in square brackets
+        text = re.sub(r"\\W", " ", text)  # Remove non-word characters
+        text = re.sub(r'https?://\S+|www\.\S+', '', text)  # Remove URLs
+        text = re.sub(r'<.*?>+', '', text)  # Remove HTML tags
+        text = re.sub(r'\w*\d\w*', '', text)  # Remove words containing numbers
+        return text.strip()
+data['text']=data['text'].apply(clean_text)
 
 textdata=pd.DataFrame(columns=['text','Class'])
 for i in range(len(data)):
@@ -146,19 +150,45 @@ textdata = textdata.reset_index(drop=True)
 
 logistic_model = LogisticRegression()
 lasso_model = LogisticRegression(penalty='l1', C=0.1, solver='liblinear')
-
+lasso_model.__class__.__name__='lasso'
 ridge_model = LogisticRegression(penalty='l2', C=0.1)
+ridge_model.__class__.__name__='ridge'
+dt_classifier = DecisionTreeClassifier(random_state=42)
 
-
-vectorizers=[CountVectorizer(),TfidfVectorizer()]
+vectorizers=[CountVectorizer(binary=True)]
 ''',svm.SVC()'''
-models=[ MultinomialNB(),logistic_model,lasso_model,ridge_model]
+models=[ MultinomialNB(),logistic_model,lasso_model,ridge_model,dt_classifier]
 
 Y = textdata['Class']
 resultsdfac=pd.DataFrame()
-for vectorizer in vectorizers:
-    X = vectorizer.fit_transform(textdata['clean_text'])
-    X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.2, random_state=2)
+for vectorizer in vectorizers:  
+    X_train, X_test, Y_train, Y_test = train_test_split(textdata['clean_text'], Y, test_size=0.2, random_state=2)
+    X_train = vectorizer.fit_transform(X_train)
+    X_test = vectorizer.transform(X_test)
+    Y_train = np.vectorize(lambda x: pd.to_numeric(x, errors='coerce'))(Y_train)
+    Y_test = np.vectorize(lambda x: pd.to_numeric(x, errors='coerce'))(Y_test)
+    for model in models:
+        model.fit(X_train, Y_train)
+        Y_pred = model.predict(X_test)
+        if model==lasso_model :
+            resultsdfac.loc['lasso','Binary'] = accuracy_score(Y_test, Y_pred)
+        elif model==ridge_model:
+            resultsdfac.loc['ridge','Binary']= accuracy_score(Y_test, Y_pred)
+        elif  model==logistic_model:
+            resultsdfac.loc['logistic','Binary'] = accuracy_score(Y_test, Y_pred) 
+        else:
+            resultsdfac.loc[model.__class__.__name__,'Binary']= accuracy_score(Y_test, Y_pred) 
+
+vectorizers=[CountVectorizer(binary=False),TfidfVectorizer()]
+''',svm.SVC()'''
+models=[ MultinomialNB(),logistic_model,lasso_model,ridge_model,dt_classifier,svm.SVC()]
+
+Y = textdata['Class']
+
+for vectorizer in vectorizers:  
+    X_train, X_test, Y_train, Y_test = train_test_split(textdata['clean_text'], Y, test_size=0.2, random_state=2)
+    X_train = vectorizer.fit_transform(X_train)
+    X_test = vectorizer.transform(X_test)
     Y_train = np.vectorize(lambda x: pd.to_numeric(x, errors='coerce'))(Y_train)
     Y_test = np.vectorize(lambda x: pd.to_numeric(x, errors='coerce'))(Y_test)
     for model in models:
@@ -177,40 +207,73 @@ for vectorizer in vectorizers:
 
 #Word2vec
 
-w2vec = Word2Vec(sentences=textdata['tokens'], vector_size=300, window=5, min_count=1, workers=6)
-
-words = list(w2vec.wv.index_to_key)
-print(words[0])  # print first 10 words as an example
-w2vec.wv['donald']
 
 
-def get_average_word2vec(tokens_list, w2vec):
-    # Filter out words that are not in the Word2Vec model's vocabulary
-   valid_words = [w2vec.wv[word] for word in tokens_list if word in w2vec.wv]
+
+
+def get_average_word2vec(tokens_list, w2vec, vector_size=300):
+    """
+    Calculate the average Word2Vec vector for a list of tokens.
+
+    Parameters:
+        tokens_list (list): A list of tokens.
+        w2vec (gensim.models.Word2Vec): A trained Word2Vec model.
+        vector_size (int): The size of the Word2Vec vectors.
+
+    Returns:
+        numpy.ndarray: The average vector of the valid tokens. If no valid tokens, returns a zero vector.
+    """
+    # Filter out words not in the Word2Vec vocabulary
+    valid_words = [w2vec.wv[word] for word in tokens_list if word in w2vec.wv]
+
+    # If no valid words, return a zero vector
+    if not valid_words:
+        return np.zeros(vector_size)
     
-    # If valid words are found, return their average vector
-   
-   tmp= np.vstack(valid_words)
-   result=np.mean(tmp, axis=0) 
-   return result
+    # Calculate the mean of valid word vectors
+    tmp = np.vstack(valid_words)  # Stack vectors vertically
+    result = np.mean(tmp, axis=0)  # Calculate mean across rows
+    return result
     # If no valid words, return a zero vector of the desired size
 
 
-k1=np.zeros((len(textdata),300))
 
-for i in range(len(textdata)):
+
+
+
+models=[ logistic_model,lasso_model,ridge_model,dt_classifier,svm.SVC()]  
+X_train, X_test, Y_train, Y_test = train_test_split(textdata['tokens'], Y, test_size=0.2, random_state=2)
+w2vec = Word2Vec(sentences=X_train, vector_size=300, window=5, min_count=1, workers=6)
+
+
+
+
+
+Y_train.reset_index(drop=True)
+Y_test.reset_index(drop=True)
+
+
+Train_trans=np.zeros((len(X_train),300))
+Test_trans=np.zeros((len(X_test),300))
+i=0
+for idx in X_train.index :     
+    Train_trans[i,:] = get_average_word2vec(X_train[idx], w2vec) 
+    i=i+1
     
-    k1[i,:] = get_average_word2vec(textdata['tokens'][i], w2vec) 
+    
+    
+i=0
+for idx in X_test.index :   
+    
+    Test_trans[i,:] = get_average_word2vec(X_test[idx], w2vec) 
+    i=i+1
+    
 
-
-
-models=[ logistic_model,lasso_model,ridge_model]  
-X_train, X_test, Y_train, Y_test = train_test_split(k1, Y, test_size=0.2, random_state=2)
 Y_train = np.vectorize(lambda x: pd.to_numeric(x, errors='coerce'))(Y_train)
 Y_test = np.vectorize(lambda x: pd.to_numeric(x, errors='coerce'))(Y_test)
 for model in models:
-        model.fit(X_train, Y_train)
-        Y_pred = model.predict(X_test)
+        model.fit(Train_trans, Y_train)
+        Y_pred = model.predict(Test_trans)
         if model==lasso_model :
             resultsdfac.loc['lasso','word2vec'] = accuracy_score(Y_test, Y_pred)
         elif model==ridge_model:
@@ -222,3 +285,49 @@ for model in models:
 
 
 
+resultsdfac.to_excel("results.xlsx")  
+
+#Hyperparameter tuning for SVM
+
+vectorizer=CountVectorizer(binary=True)
+X = vectorizer.fit_transform(textdata['clean_text'])
+model=svm.SVC()
+
+
+Y = textdata['Class']
+Y = np.vectorize(lambda x: pd.to_numeric(x, errors='coerce'))(Y)
+
+param_distributions = {
+    'C': loguniform(1e-3, 1e3),  # Regularization parameter
+    'kernel': ['linear', 'rbf','sigmoid'],  # Kernel type
+    'gamma': loguniform(1e-4, 1e1)  # Kernel coefficient for rbf
+}
+
+random_search = RandomizedSearchCV(
+    estimator=model,
+    param_distributions=param_distributions,
+    n_iter=50,  # Number of random configurations to try
+    scoring='accuracy',  # Or another appropriate metric
+    cv=5,  # Number of cross-validation folds
+    verbose=2,
+    n_jobs=-1,  # Use all available processors
+    random_state=42
+)
+
+random_search.fit(X, Y)
+
+
+
+# Prompt
+
+prompt=['BREAKING: Donald Trump Announces Plan to Colonize Mars Former President Donald Trump unveiled an ambitious plan today, declaring his intention to lead the charge in colonizing Mars. Speaking at a rally, he stated, “No one’s ever done Mars like we’re going to do it. It’ll be tremendous, believe me.” Trump claimed his new initiative, "Trump Galactic," would establish "the biggest, most luxurious Martian city ever." Critics dismissed the plan as unrealistic, but supporters hailed it as visionary. SpaceX founder Elon Musk declined to comment, fueling speculation about potential collaboration.Stay tuned for developments on this out-of-this-world endeavor. ']
+dftry=pd.DataFrame(data=prompt,columns=['text'])
+
+dftry['text']=dftry['text'].apply(clean_text)
+dftry['tokens'] = dftry['text'].apply(lambda x: x.split())
+dftry['tokens'] = dftry['tokens'].apply(remove_stopwords)
+dftry['tokens'] = dftry['tokens'].apply(text_stemmer)
+dftry['clean_text'] = dftry['tokens'].apply(lambda tokens: ' '.join(tokens))
+
+X_test = vectorizer.transform(dftry['clean_text'])
+model.predict(X_test)
