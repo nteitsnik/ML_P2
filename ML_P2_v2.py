@@ -39,8 +39,6 @@ stop_words = set(stopwords.words("english"))
 
 nltk.download('stopwords')
 
-os.environ["OMP_NUM_THREADS"] = "1"
-
 nltk.download('punkt')
 
 
@@ -74,6 +72,7 @@ true_news['Class']=0
 
 #Remove the Reueters tag and back from real news
 true_news["text"] = true_news["text"].str.replace(r".*?\(Reuters\) -", "", regex=True)
+
 #create a unified dataframe
 cols=fake_news.columns.values
 cols=np.append(cols,'Class')
@@ -155,10 +154,15 @@ ridge_model = LogisticRegression(penalty='l2', C=0.1)
 ridge_model.__class__.__name__='ridge'
 dt_classifier = DecisionTreeClassifier(random_state=42)
 
-vectorizers=[CountVectorizer(binary=True)]
-''',svm.SVC()'''
+
+
 models=[ MultinomialNB(),logistic_model,lasso_model,ridge_model,dt_classifier,svm.SVC()]
 
+
+
+
+
+vectorizers=[CountVectorizer(binary=True)]
 Y = textdata['Class']
 resultsdfac=pd.DataFrame()
 for vectorizer in vectorizers:  
@@ -212,17 +216,7 @@ for vectorizer in vectorizers:
 
 
 def get_average_word2vec(tokens_list, w2vec, vector_size=300):
-    """
-    Calculate the average Word2Vec vector for a list of tokens.
-
-    Parameters:
-        tokens_list (list): A list of tokens.
-        w2vec (gensim.models.Word2Vec): A trained Word2Vec model.
-        vector_size (int): The size of the Word2Vec vectors.
-
-    Returns:
-        numpy.ndarray: The average vector of the valid tokens. If no valid tokens, returns a zero vector.
-    """
+  
     # Filter out words not in the Word2Vec vocabulary
     valid_words = [w2vec.wv[word] for word in tokens_list if word in w2vec.wv]
 
@@ -236,18 +230,9 @@ def get_average_word2vec(tokens_list, w2vec, vector_size=300):
     return result
     # If no valid words, return a zero vector of the desired size
 
-
-
-
-
-''',svm.SVC()'''
 models=[ logistic_model,lasso_model,ridge_model,dt_classifier,svm.SVC()]  
 X_train, X_test, Y_train, Y_test = train_test_split(textdata['tokens'], Y, test_size=0.2, random_state=2)
 w2vec = Word2Vec(sentences=X_train, vector_size=300, window=5, min_count=1, workers=6)
-
-
-
-
 
 Y_train.reset_index(drop=True)
 Y_test.reset_index(drop=True)
@@ -259,16 +244,13 @@ i=0
 for idx in X_train.index :     
     Train_trans[i,:] = get_average_word2vec(X_train[idx], w2vec) 
     i=i+1
-    
-    
-    
+       
 i=0
 for idx in X_test.index :   
     
     Test_trans[i,:] = get_average_word2vec(X_test[idx], w2vec) 
     i=i+1
     
-
 Y_train = np.vectorize(lambda x: pd.to_numeric(x, errors='coerce'))(Y_train)
 Y_test = np.vectorize(lambda x: pd.to_numeric(x, errors='coerce'))(Y_test)
 for model in models:
@@ -286,7 +268,7 @@ for model in models:
 
 
 
-resultsdfac.to_excel("results_non_stop.xlsx")  
+resultsdfac.to_excel("results_stop.xlsx")  
 
 #Hyperparameter tuning for SVM
 '''
@@ -329,14 +311,14 @@ with open("random_search.best_score_svm.txt", "w") as file:
 
 #ridge parameter tuning
 
-log_reg = LogisticRegression(penalty='l2')
+log_reg = LogisticRegression()
 
 # Define parameter grid
 param_grid = {
     'C': [0.001, 0.01, 0.1, 1, 10],
     'solver': ['lbfgs', 'liblinear', 'saga'],  
 
-    'max_iter': [100, 200]
+    'max_iter': [100, 200, 300]
 }
 
 random_search = RandomizedSearchCV(
@@ -384,7 +366,7 @@ model.predict(X_test)
 
 #---------------------------  
 
-ridge_model = LogisticRegression(penalty='l2', C=0.1)
+ridge_model = LogisticRegression( C=0.1)
 ridge_model.__class__.__name__='ridge'
 vectorizers=CountVectorizer(binary=True)    
 
@@ -398,7 +380,8 @@ ridge_model.fit(X, Y)
 
 
 
-prompt=['The Trump administration on [Date in 2017] issued an executive order directing federal agencies to review and potentially rescind a number of environmental regulations enacted during the Obama presidency.The order, signed by President Trump at the Environmental Protection Agency (EPA) headquarters, targets regulations related to climate change, water quality, and energy production.Environmental groups swiftly condemned the move, arguing it would weaken crucial environmental protections and jeopardize public health.This executive order is a direct attack on our environment and the health of our communities, said [Name of Environmental Group Leader], [Title]. Rolling back these regulations will have devastating consequences for our air, water, and climate.The White House, however, defended the order, stating it would streamline the regulatory process and unleash American energy.The order directs agencies to identify and review regulations that they believe impose an undue burden on businesses and the economy.This action marks a significant shift in environmental policy under the Trump administration, which has pledged to dismantle many of the Obama administration s environmental initiatives.']
+prompt=['A former Colorado Bureau of Investigation DNA scientist appeared in court Thursday to face criminal charges over data tampering that authorities said raises questions about the validity of more than 500 cases.Problems with the scientist’s work were found in cases involving homicide, sexual assault, robbery and other crimes, according to a law enforcement affidavit.In at least two cases, both homicides, the defendants received lesser sentences under plea deals than they could have faced if they went to trial because prosecutors were afraid Yvonne “Missy” Woods’ involvement could lead to acquittals.Woods was described as a “star analyst” by a former colleague who was interviewed by investigators, but also one who worked too fast and was “not the most thorough,” according to an internal affairs report.Authorities haven’t found any evidence of wrongful convictions, but prosecutors across the state are continuing to review the impacted cases.“This gets to the heart of whether or not science can be trusted, whether or not law enforcement can be trusted and quite frankly whether the judicial system can be trusted,” Jefferson County judge Graham Peper said during the short hearing.Woods allegedly told investigators at one point that she had changed data to complete cases more quickly, according to an arrest affidavit.Woods faces 52 counts of forgery, 48 counts of attempting to influence a public servant and one count each of perjury and cybercrime, for alleged misconduct between 2008 and 2023.The fallout from the alleged misconduct is still unfolding.In the most recent case to be impacted, Michael Shannel Jefferson was sentenced last week to 32 years in prison in the home invasion killing of Roger Dean in 1985. Jefferson was identified as a suspect in the cold case in 2021 through DNA evidence.']
+
 dftry=pd.DataFrame(data=prompt,columns=['text'])
 
 dftry['text']=dftry['text'].apply(clean_text)
@@ -436,3 +419,28 @@ dftry['clean_text'] = dftry['tokens'].apply(lambda tokens: ' '.join(tokens))
 
 X_test = vectorizer.transform(dftry['clean_text'])
 prediction=ridge_model.predict(X_test)
+
+
+prompt=['In a shocking revelation during a livestream, Kanye West unveiled his latest vision: creating a self-sustaining city called “Yeezy City” in the middle of the Nevada desert. The city, described by Kanye as “the future of human innovation,” will reportedly feature futuristic Yeezy-designed homes, a music production hub, and a museum dedicated entirely to Kanye’s career.Yeezy City will be a utopia where creativity knows no limits,” West stated. He also hinted at plans for a cryptocurrency called “YeezyCoin” to power the local economy.Critics have questioned the feasibility of the project, while fans have already started online petitions to move there. When asked about timelines, Kanye confidently replied, “We’re breaking ground next year. Elon’s already on board.”The announcement has sparked a social media frenzy, with many wondering if Yeezy City could become the next Silicon Valley—or just another Kanye dream.']
+dftry=pd.DataFrame(data=prompt,columns=['text'])
+
+dftry['text']=dftry['text'].apply(clean_text)
+dftry['tokens'] = dftry['text'].apply(lambda x: x.split())
+dftry['tokens'] = dftry['tokens'].apply(remove_stopwords)
+dftry['tokens'] = dftry['tokens'].apply(text_stemmer)
+dftry['clean_text'] = dftry['tokens'].apply(lambda tokens: ' '.join(tokens))
+
+X_test = vectorizer.transform(dftry['clean_text'])
+model.predict(X_test)
+
+prompt=['via']
+dftry=pd.DataFrame(data=prompt,columns=['text'])
+
+dftry['text']=dftry['text'].apply(clean_text)
+dftry['tokens'] = dftry['text'].apply(lambda x: x.split())
+dftry['tokens'] = dftry['tokens'].apply(remove_stopwords)
+dftry['tokens'] = dftry['tokens'].apply(text_stemmer)
+dftry['clean_text'] = dftry['tokens'].apply(lambda tokens: ' '.join(tokens))
+
+X_test = vectorizer.transform(dftry['clean_text'])
+ridge_model.predict(X_test)
